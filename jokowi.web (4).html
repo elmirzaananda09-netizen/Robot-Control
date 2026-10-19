@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jokowi.web</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Merriweather:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --theme: #dc2626; }
+        * { transition: background-color 0.2s, border-color 0.2s, color 0.2s; font-family: 'Lora', 'Merriweather', Georgia, serif; }
+        body { 
+            background-color: #fafafa; 
+            background-image: url("https://www.transparenttextures.com/patterns/scribble-light.png");
+            background-repeat: repeat;
+            overflow: hidden; 
+        }
+        
+        .nav-btn.active { color: var(--theme); }
+        .nav-btn.active i { color: var(--theme); }
+        .page { display: none; animation: fadeIn 0.3s ease; height: 100%; overflow-y: auto; padding-bottom: 72px; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        .dpad-btn {
+            width: 96px; height: 96px;
+            background: white;
+            border: 2px solid #fecaca;
+            border-radius: 24px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px; color: #9ca3af;
+            cursor: pointer; user-select: none;
+            box-shadow: 0 6px 18px rgba(220,38,38,0.1);
+            transition: all 0.12s ease;
+        }
+        .dpad-btn:active, .dpad-btn.pressed {
+            background: var(--theme);
+            color: white;
+            border-color: var(--theme);
+            transform: scale(0.92);
+            box-shadow: 0 0 0 5px rgba(220,38,38,0.25);
+        }
+        .dpad-center {
+            width: 96px; height: 96px;
+            background: #fef2f2;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700; color: #f87171;
+            letter-spacing: 0.05em;
+            border: 2px solid #fecaca;
+        }
+        @media (max-width: 640px) {
+            .dpad-btn, .dpad-center { width: 72px; height: 72px; font-size: 22px; }
+            .dpad-center { font-size: 12px; }
+        }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #fecaca; border-radius: 10px; }
+        
+        #toast { position: fixed; bottom: 90px; right: 20px; transform: translateY(100px); transition: 0.4s; z-index: 1000; }
+        
+        .logo-img {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            object-fit: cover;
+            border: 2px solid #fecaca;
+            cursor: pointer;
+            background: #fef2f2;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <header class="h-14 bg-white border-b border-red-100 px-4 flex items-center justify-between shrink-0 z-40">
+        <div class="flex items-center gap-2.5">
+            <label for="logo-input" class="cursor-pointer shrink-0" title="Klik untuk ganti foto">
+                <img id="logo-img" class="logo-img" src="https://api.dicebear.com/7.x/identicon/svg?seed=jokowi&backgroundColor=dc2626" alt="Logo">
+            </label>
+            <input type="file" id="logo-input" accept="image/*" class="hidden">
+            <span class="font-extrabold text-base tracking-tight">jokowi<span class="text-red-600">.web</span></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div id="status-bt" class="px-2.5 py-1 rounded-full bg-red-50 text-[10px] font-bold text-red-300 border border-red-100 italic">BT: OFFLINE</div>
+            <button id="btn-conn-bt" class="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold hover:scale-105 active:scale-95 shadow flex items-center gap-1.5">
+                <i class="fab fa-bluetooth"></i> CONNECT
+            </button>
+            <button id="btn-dis-bt" disabled class="text-red-500 hover:text-red-700 px-1.5 disabled:opacity-30"><i class="fas fa-times"></i></button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-5 pb-20 relative">
+            
+            <!-- DASHBOARD: hanya D-Pad -->
+            <section id="page-dash" class="page active">
+                <div class="flex flex-col items-center justify-center min-h-full py-4">
+                    <div class="w-full max-w-md flex justify-between items-end mb-8 px-2">
+                        <div>
+                            <h1 class="text-2xl font-black text-gray-800">Dashboard</h1>
+                            <p class="text-gray-400 text-xs">Controller Micro:bit</p>
+                        </div>
+                        <div class="text-right">
+                            <p id="live-clock" class="text-lg font-bold font-mono text-red-600">00:00:00</p>
+                            <p class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">WIB</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col items-center justify-center gap-3 py-2">
+                        <button class="dpad-btn" data-dir="up" id="btn-up"><i class="fas fa-chevron-up"></i></button>
+                        <div class="flex items-center gap-4">
+                            <button class="dpad-btn" data-dir="left" id="btn-left"><i class="fas fa-chevron-left"></i></button>
+                            <div class="dpad-center" id="dpad-status">STOP</div>
+                            <button class="dpad-btn" data-dir="right" id="btn-right"><i class="fas fa-chevron-right"></i></button>
+                        </div>
+                        <button class="dpad-btn" data-dir="down" id="btn-down"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+
+                    <div class="w-full max-w-sm mt-8 bg-white rounded-2xl border border-red-100 p-4 shadow-sm">
+                        <p class="text-[9px] font-bold text-red-300 uppercase tracking-widest mb-3 text-center">Data yang dikirim</p>
+                        <div class="grid grid-cols-5 gap-1 text-[10px] text-center">
+                            <div><span class="text-gray-400">UP</span><br><b id="preview-up" class="text-red-600">up</b></div>
+                            <div><span class="text-gray-400">DOWN</span><br><b id="preview-down" class="text-red-600">down</b></div>
+                            <div><span class="text-gray-400">LEFT</span><br><b id="preview-left" class="text-red-600">left</b></div>
+                            <div><span class="text-gray-400">RIGHT</span><br><b id="preview-right" class="text-red-600">right</b></div>
+                            <div><span class="text-gray-400">STOP</span><br><b id="preview-stop" class="text-red-500">stop</b></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- WIDGET BUILDER -->
+            <section id="page-build" class="page">
+                <h2 class="text-xl font-bold mb-6 text-gray-800">Widget Builder</h2>
+
+                <div class="bg-white p-6 rounded-3xl border border-red-100 shadow-sm max-w-xl space-y-4">
+                    <input type="text" id="w-key" placeholder="Nama Key / Device (ex: lampu_teras)" class="w-full p-3.5 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-200">
+                    
+                    <div class="flex gap-3">
+                        <select id="w-type" class="flex-1 p-3.5 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                            <option value="sensor">Chart Sensor (Analog)</option>
+                            <option value="switch">Toggle Switch (0/1)</option>
+                            <option value="dimmer">Dimmer Slider (0-1024)</option>
+                        </select>
+                        <input type="text" id="w-unit" placeholder="Satuan (ex: °C)" class="w-1/3 p-3.5 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+                    
+                    <input type="number" id="w-max" placeholder="Batas Maksimal Chart/Slider (ex: 100)" class="w-full p-3.5 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    
+                    <button id="btn-save-widget" class="w-full bg-red-600 hover:bg-red-700 transition-colors text-white py-3.5 rounded-2xl font-bold text-xs shadow-lg mt-1 tracking-wide">
+                        SIMPAN WIDGET
+                    </button>
+                </div>
+            </section>
+
+            <!-- TEACHABLE MACHINE -->
+            <section id="page-teach" class="page">
+                <div class="flex flex-col items-center w-full max-w-2xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-1 text-gray-800 text-center">Teachable Machine</h2>
+                    <p class="text-gray-400 text-xs mb-5 text-center">Tempel kode JS → START. Kalau model lokal, nanti pilih folder <code class="bg-gray-100 px-1 rounded">my_model</code> sekali saja.</p>
+
+                    <div class="bg-white p-5 rounded-3xl border border-red-100 shadow-sm w-full space-y-4">
+                        <div>
+                            <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Kode JavaScript Teachable Machine</label>
+                            <textarea id="tm-js" rows="8" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-[11px] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 font-mono leading-relaxed" placeholder="Tempel / ganti kode JS di sini kapan saja..."></textarea>
+                        </div>
+
+                        <div class="border border-dashed border-red-200 rounded-2xl p-4 bg-red-50/30 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Model folder</p>
+                                    <p id="tm-model-status" class="text-xs text-gray-500 mt-0.5">Belum ada model — upload folder my_model</p>
+                                </div>
+                                <button type="button" id="btn-tm-upload" class="shrink-0 px-4 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50">
+                                    UPLOAD MODEL
+                                </button>
+                            </div>
+                            <p class="text-[10px] text-gray-400">Bisa upload ulang kapan saja kalau ganti training / ganti JS.</p>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button id="btn-tm-start" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3.5 rounded-2xl font-bold text-xs shadow">
+                                START KAMERA
+                            </button>
+                            <button id="btn-tm-stop" disabled class="flex-1 bg-gray-100 text-gray-400 py-3.5 rounded-2xl font-bold text-xs disabled:opacity-50">
+                                STOP
+                            </button>
+                        </div>
+
+                        <div class="relative bg-gray-900 rounded-2xl overflow-hidden w-full mx-auto" style="max-width:480px;aspect-ratio:4/3;">
+                            <canvas id="tm-canvas" class="w-full h-full object-contain hidden"></canvas>
+                            <div id="tm-placeholder" class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-400">
+                                <i class="fas fa-camera text-4xl text-gray-600"></i>
+                                <span class="text-sm">Kamera belum aktif</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
+                            <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">Prediksi</p>
+                            <p id="tm-label" class="text-2xl font-black text-gray-800">—</p>
+                            <p id="tm-conf" class="text-xs text-gray-400 mt-1">confidence: 0%</p>
+                        </div>
+
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Threshold (<span id="tm-th-val">0.75</span>)</label>
+                            <input type="range" id="tm-threshold" min="50" max="99" value="75" class="w-full mt-1">
+                        </div>
+
+                        <div id="tm-class-map" class="hidden border-2 border-dashed border-red-200 rounded-2xl p-4 bg-red-50/40 space-y-2">
+                            <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Class → Perintah</p>
+                            <div id="tm-class-list" class="space-y-2"></div>
+                        </div>
+
+                        <div class="text-[10px] text-gray-400 leading-relaxed border-t border-red-50 pt-3">
+                            <b>Cara pakai:</b><br>
+                            1. Tempel / ganti kode JS<br>
+                            2. Tekan <b>UPLOAD MODEL</b> → pilih folder <code>my_model</code><br>
+                            3. Tekan <b>START KAMERA</b><br>
+                            4. Mau ganti model? Upload lagi, ganti JS, Start lagi
+                        </div>
+                        <input type="file" id="tm-folder" webkitdirectory multiple class="hidden">
+                    </div>
+                </div>
+            </section>
+
+            <!-- WIDGET SETTINGS (D-Pad mapping) -->
+            <section id="page-settings" class="page">
+                <h2 class="text-xl font-bold mb-2 text-gray-800">Widget Settings</h2>
+                <p class="text-gray-400 text-xs mb-6">Atur data yang dikirim saat D-Pad ditekan / dilepas</p>
+
+                <div class="bg-white p-6 rounded-3xl border border-red-100 shadow-sm max-w-xl space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">UP</label>
+                        <input type="text" id="map-up" value="up" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">DOWN</label>
+                        <input type="text" id="map-down" value="down" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">LEFT</label>
+                        <input type="text" id="map-left" value="left" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">RIGHT</label>
+                        <input type="text" id="map-right" value="right" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-red-400 uppercase tracking-widest">STOP (lepas semua tombol)</label>
+                        <input type="text" id="map-stop" value="stop" class="w-full mt-1 p-3 border border-gray-100 rounded-2xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200">
+                    </div>
+
+                    <button id="btn-save-map" class="w-full bg-red-600 hover:bg-red-700 text-white py-3.5 rounded-2xl font-bold text-xs shadow-lg mt-2 tracking-wide">
+                        SIMPAN MAPPING
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Right Log -->
+        <div class="w-72 border-l border-red-100 bg-white p-4 hidden md:flex flex-col gap-3 shrink-0">
+            <h3 class="font-bold text-xs italic text-red-400">System Activity</h3>
+            <div class="space-y-2 overflow-y-auto flex-1" id="log-panel">
+                <div class="flex items-center gap-2.5 p-2.5 bg-red-50 rounded-xl border border-red-100">
+                    <div class="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold text-gray-700">System Ready</p>
+                        <p class="text-[9px] text-gray-400">Menunggu koneksi...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <nav class="h-14 bg-white border-t border-red-100 flex items-center justify-around shrink-0 z-40">
+        <button onclick="window.showPage('dash')" id="nav-dash" class="nav-btn active flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl text-gray-400 font-medium text-[10px]">
+            <i class="fas fa-gamepad text-lg"></i>
+            <span>Dashboard</span>
+        </button>
+        <button onclick="window.showPage('build')" id="nav-build" class="nav-btn flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-gray-400 font-medium text-[10px]">
+            <i class="fas fa-tools text-lg"></i>
+            <span>Builder</span>
+        </button>
+        <button onclick="window.showPage('teach')" id="nav-teach" class="nav-btn flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-gray-400 font-medium text-[10px]">
+            <i class="fas fa-robot text-lg"></i>
+            <span>Teachable</span>
+        </button>
+        <button onclick="window.showPage('settings')" id="nav-settings" class="nav-btn flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-gray-400 font-medium text-[10px]">
+            <i class="fas fa-cog text-lg"></i>
+            <span>Settings</span>
+        </button>
+    </nav>
+
+    <div id="toast" class="bg-red-600 text-white px-5 py-2.5 rounded-2xl text-xs font-bold shadow-2xl flex items-center gap-2">
+        <i class="fas fa-info-circle"></i> <span id="toast-msg">Ready!</span>
+    </div>
+
+    <script type="module">
+        const UART_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+        const TX_CHARACTERISTIC_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+        const RX_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+
+        const state = {
+            device: null, txChar: null, rxChar: null,
+            bleConnected: false, bleBuffer: "",
+            pressed: new Set(),
+            mapping: { up: "up", down: "down", left: "left", right: "right", stop: "stop" }
+        };
+
+        const $ = (id) => document.getElementById(id);
+
+        window.showPage = (id) => {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            $('page-' + id).classList.add('active');
+            $('nav-' + id).classList.add('active');
+        };
+
+        function showToast(msg) {
+            const t = $('toast');
+            $('toast-msg').innerText = msg;
+            t.style.transform = "translateY(0)";
+            setTimeout(() => t.style.transform = "translateY(100px)", 2800);
+        }
+
+        function logActivity(icon, colorClass, title, desc) {
+            const panel = $('log-panel');
+            if (!panel) return;
+            const html = `
+                <div class="flex items-center gap-2.5 p-2.5 bg-red-50 rounded-xl border border-red-100 animate-[fadeIn_0.25s_ease]">
+                    <div class="w-7 h-7 rounded-full ${colorClass} flex items-center justify-center text-[10px]"><i class="${icon}"></i></div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold text-gray-700 truncate">${title}</p>
+                        <p class="text-[9px] text-gray-400 truncate">${desc}</p>
+                    </div>
+                </div>`;
+            panel.insertAdjacentHTML('afterbegin', html);
+            while (panel.children.length > 8) panel.lastElementChild.remove();
+        }
+
+        setInterval(() => { if ($('live-clock')) $('live-clock').innerText = new Date().toLocaleTimeString('id-ID'); }, 1000);
+
+        // Logo: klik PP langsung ganti
+        function loadLogo() {
+            const saved = localStorage.getItem('jokowi_logo');
+            if (saved && $('logo-img')) $('logo-img').src = saved;
+        }
+        function setLogo(dataUrl) {
+            localStorage.setItem('jokowi_logo', dataUrl);
+            if ($('logo-img')) $('logo-img').src = dataUrl;
+            showToast("Foto diganti!");
+        }
+        function bindLogo() {
+            const input = $('logo-input');
+            if (!input) return;
+            input.addEventListener('change', (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                if (!file.type.startsWith('image/')) {
+                    showToast("Pilih file gambar!");
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (ev) => setLogo(ev.target.result);
+                reader.onerror = () => showToast("Gagal baca foto");
+                reader.readAsDataURL(file);
+                input.value = '';
+            });
+        }
+
+        // Mapping
+        function loadMapping() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('jokowi_map') || '{}');
+                state.mapping = { ...state.mapping, ...saved };
+            } catch(e) {}
+            updatePreview();
+            if ($('map-up')) {
+                $('map-up').value = state.mapping.up;
+                $('map-down').value = state.mapping.down;
+                $('map-left').value = state.mapping.left;
+                $('map-right').value = state.mapping.right;
+                $('map-stop').value = state.mapping.stop;
+            }
+        }
+
+        function updatePreview() {
+            if ($('preview-up')) {
+                $('preview-up').innerText = state.mapping.up;
+                $('preview-down').innerText = state.mapping.down;
+                $('preview-left').innerText = state.mapping.left;
+                $('preview-right').innerText = state.mapping.right;
+                $('preview-stop').innerText = state.mapping.stop;
+            }
+        }
+
+        $('btn-save-map').onclick = () => {
+            state.mapping.up = $('map-up').value.trim() || "up";
+            state.mapping.down = $('map-down').value.trim() || "down";
+            state.mapping.left = $('map-left').value.trim() || "left";
+            state.mapping.right = $('map-right').value.trim() || "right";
+            state.mapping.stop = $('map-stop').value.trim() || "stop";
+            localStorage.setItem('jokowi_map', JSON.stringify(state.mapping));
+            updatePreview();
+            showToast("Mapping disimpan!");
+            logActivity("fas fa-save", "bg-red-100 text-red-600", "Mapping Saved", "D-Pad updated");
+            window.showPage('dash');
+        };
+
+        $('btn-save-widget').onclick = () => {
+            let key = $('w-key').value.trim().replace(/\s+/g, '_').toLowerCase();
+            if (!key) { showToast("Isi nama key dulu!"); return; }
+            showToast("Widget \"" + key + "\" disimpan!");
+            logActivity("fas fa-plus", "bg-red-100 text-red-600", "Widget Saved", key);
+            $('w-key').value = ''; $('w-unit').value = ''; $('w-max').value = '';
+        };
+
+        // Antrian kirim — hindari write bersamaan (penyebab disconnect)
+        const txQueue = [];
+        let txBusy = false;
+        let lastSent = "";
+        let lastSentAt = 0;
+
+        async function processTxQueue() {
+            if (txBusy) return;
+            txBusy = true;
+            while (txQueue.length > 0) {
+                const text = txQueue.shift();
+                if (!state.rxChar || !state.bleConnected) {
+                    logActivity("fas fa-exclamation-triangle", "bg-red-100 text-red-600", "TX Failed", "Belum connect BT");
+                    break;
+                }
+                // skip duplikat sangat cepat
+                const now = Date.now();
+                if (text === lastSent && (now - lastSentAt) < 80) continue;
+                lastSent = text;
+                lastSentAt = now;
+
+                const payload = text + "\n";
+                const data = new TextEncoder().encode(payload);
+                try {
+                    if (state.rxChar.properties.writeWithoutResponse) {
+                        await state.rxChar.writeValueWithoutResponse(data);
+                    } else {
+                        await state.rxChar.writeValue(data);
+                    }
+                    logActivity("fas fa-paper-plane", "bg-red-100 text-red-600", "TX", payload.trim());
+                } catch (e) {
+                    console.error(e);
+                    logActivity("fas fa-times", "bg-red-100 text-red-600", "TX Error", e.message || "write failed");
+                    // jangan flood retry
+                    await new Promise(r => setTimeout(r, 50));
+                }
+                // jeda kecil antar paket biar UART micro:bit tidak overflow
+                await new Promise(r => setTimeout(r, 40));
+            }
+            txBusy = false;
+        }
+
+        function sendData(text) {
+            if (!text) return;
+            txQueue.push(String(text));
+            // batasi antrian
+            while (txQueue.length > 5) txQueue.shift();
+            processTxQueue();
+        }
+
+        function pressDir(dir) {
+            if (state.pressed.has(dir)) return;
+            state.pressed.add(dir);
+            $(`btn-${dir}`)?.classList.add('pressed');
+            $('dpad-status').innerText = dir.toUpperCase();
+            $('dpad-status').style.color = "#dc2626";
+            sendData(state.mapping[dir] || dir);
+        }
+
+        function releaseDir(dir) {
+            if (!state.pressed.has(dir)) return;
+            state.pressed.delete(dir);
+            $(`btn-${dir}`)?.classList.remove('pressed');
+            if (state.pressed.size === 0) {
+                $('dpad-status').innerText = "STOP";
+                $('dpad-status').style.color = "#f87171";
+                sendData(state.mapping.stop || "stop");
+            }
+        }
+
+        ['up','down','left','right'].forEach(dir => {
+            const btn = $(`btn-${dir}`);
+            if (!btn) return;
+            btn.addEventListener('mousedown', e => { e.preventDefault(); pressDir(dir); });
+            btn.addEventListener('mouseup', e => { e.preventDefault(); releaseDir(dir); });
+            btn.addEventListener('mouseleave', () => { if (state.pressed.has(dir)) releaseDir(dir); });
+            btn.addEventListener('touchstart', e => { e.preventDefault(); pressDir(dir); }, { passive: false });
+            btn.addEventListener('touchend', e => { e.preventDefault(); releaseDir(dir); });
+            btn.addEventListener('touchcancel', e => { e.preventDefault(); releaseDir(dir); });
+        });
+
+        $('btn-conn-bt').onclick = async () => {
+            try {
+                if (!navigator.bluetooth) throw new Error("Web Bluetooth tidak didukung. Pakai Chrome + localhost.");
+                state.device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: "BBC micro:bit" }],
+                    optionalServices: [UART_SERVICE_UUID]
+                });
+                state.device.addEventListener("gattserverdisconnected", () => {
+                    state.bleConnected = false; updateBLEUI();
+                    txQueue.length = 0;
+                    state.pressed.clear();
+                    showToast("Micro:bit terputus");
+                    logActivity("fas fa-times", "bg-red-100 text-red-600", "Disconnected", "Terputus");
+                });
+                const server = await state.device.gatt.connect();
+                const service = await server.getPrimaryService(UART_SERVICE_UUID);
+                state.txChar = await service.getCharacteristic(TX_CHARACTERISTIC_UUID);
+                await state.txChar.startNotifications();
+                state.txChar.addEventListener("characteristicvaluechanged", handleBLEData);
+                state.rxChar = await service.getCharacteristic(RX_CHARACTERISTIC_UUID);
+                state.bleConnected = true; updateBLEUI();
+                showToast("Micro:bit Connected!");
+                logActivity("fab fa-bluetooth", "bg-red-100 text-red-600", "Connected", "Siap");
+            } catch (e) {
+                console.error(e);
+                let msg = e.message || "Error";
+                if (msg.includes("permissions policy") || msg.includes("disallowed")) msg = "Bluetooth diblokir. Buka di Chrome localhost.";
+                else if (msg.includes("globally disabled")) msg = "Web Bluetooth dimatikan. Pakai Chrome + localhost.";
+                else if (msg.includes("cancelled") || msg.includes("canceled")) msg = "Dibatalkan.";
+                showToast("Gagal: " + msg);
+                logActivity("fas fa-times", "bg-red-100 text-red-600", "Failed", msg);
+            }
+        };
+
+        $('btn-dis-bt').onclick = () => {
+            if (state.device?.gatt?.connected) state.device.gatt.disconnect();
+        };
+
+        function updateBLEUI() {
+            $('btn-conn-bt').disabled = state.bleConnected;
+            $('btn-dis-bt').disabled = !state.bleConnected;
+            const s = $('status-bt');
+            if (state.bleConnected) {
+                s.className = "px-2.5 py-1 rounded-full bg-red-600 text-[10px] font-bold text-white border-none";
+                s.innerText = "BT: ONLINE";
+            } else {
+                s.className = "px-2.5 py-1 rounded-full bg-red-50 text-[10px] font-bold text-red-300 border border-red-100 italic";
+                s.innerText = "BT: OFFLINE";
+            }
+        }
+
+        function handleBLEData(event) {
+            let arr = [];
+            for (let i = 0; i < event.target.value.byteLength; i++) arr.push(event.target.value.getUint8(i));
+            state.bleBuffer += String.fromCharCode.apply(null, arr);
+            const lines = state.bleBuffer.replace(/\r/g, '').split('\n');
+            state.bleBuffer = lines.pop();
+            lines.forEach(line => {
+                const txt = line.trim();
+                if (txt) logActivity("fas fa-arrow-down", "bg-green-100 text-green-600", "RX", txt);
+            });
+        }
+
+        // --- TEACHABLE MACHINE ---
+        const tm = {
+            model: null,
+            webcam: null,
+            running: false,
+            lastLabel: "",
+            lastSentAt: 0,
+            maxPredictions: 0,
+            classMap: {},
+            classLabels: [],
+            localFiles: null
+        };
+
+        $('tm-threshold').oninput = () => {
+            $('tm-th-val').innerText = (parseInt($('tm-threshold').value) / 100).toFixed(2);
+        };
+
+        // className (dari model) → perintah yang dikirim ke Micro:bit
+        tm.classMap = {};
+        tm.classLabels = [];
+
+        function guessCommand(label) {
+            const l = String(label).trim().toLowerCase();
+            if (state.mapping[l]) return state.mapping[l];
+            if (['up','down','left','right','stop','circle'].includes(l)) return state.mapping[l] || l;
+            if (l.includes('up') || l.includes('atas') || l.includes('maju')) return state.mapping.up || 'up';
+            if (l.includes('down') || l.includes('bawah') || l.includes('mundur')) return state.mapping.down || 'down';
+            if (l.includes('left') || l.includes('kiri')) return state.mapping.left || 'left';
+            if (l.includes('right') || l.includes('kanan')) return state.mapping.right || 'right';
+            if (l.includes('stop') || l.includes('diam') || l.includes('idle') || l.includes('none') || l.includes('background')) return state.mapping.stop || 'stop';
+            return label.trim(); // kirim nama class apa adanya
+        }
+
+        function buildClassMapUI(labels) {
+            const box = $('tm-class-map');
+            const list = $('tm-class-list');
+            if (!box || !list) return;
+            list.innerHTML = '';
+            tm.classMap = {};
+            if (!labels.length) {
+                box.classList.add('hidden');
+                return;
+            }
+            box.classList.remove('hidden');
+            labels.forEach((label, i) => {
+                const cmd = guessCommand(label);
+                tm.classMap[label] = cmd;
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2';
+                row.innerHTML = `
+                    <span class="text-[11px] font-bold text-gray-600 w-28 truncate" title="${label}">${label}</span>
+                    <span class="text-gray-300 text-xs">→</span>
+                    <input type="text" data-label="${label.replace(/"/g, '&quot;')}" value="${cmd}"
+                        class="flex-1 p-2 border border-red-100 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-red-200 tm-cmd-input">
+                `;
+                list.appendChild(row);
+            });
+            list.querySelectorAll('.tm-cmd-input').forEach(inp => {
+                inp.addEventListener('change', () => {
+                    tm.classMap[inp.dataset.label] = inp.value.trim() || inp.dataset.label;
+                });
+                inp.addEventListener('input', () => {
+                    tm.classMap[inp.dataset.label] = inp.value.trim() || inp.dataset.label;
+                });
+            });
+        }
+
+        function resolveModelBase(jsCode) {
+            const code = (jsCode || '').trim();
+            if (!code) return { base: null, local: true, err: null };
+
+            if (/^https?:\/\/\S+$/i.test(code)) {
+                let u = code.replace(/["'\s]+$/g, '');
+                u = u.replace(/model\.json$/i, '').replace(/metadata\.json$/i, '');
+                if (!u.endsWith('/')) u += '/';
+                return { base: u, local: false, err: null };
+            }
+
+            let m = code.match(/(?:const|let|var)\s+URL\s*=\s*["'`](https?:\/\/[^"'`]+)["'`]/i);
+            if (m) {
+                let u = m[1].trim();
+                if (!u.endsWith('/')) u += '/';
+                return { base: u, local: false, err: null };
+            }
+
+            m = code.match(/(https?:\/\/teachablemachine\.withgoogle\.com\/models\/[A-Za-z0-9_-]+\/?)/i);
+            if (m) {
+                let u = m[1];
+                if (!u.endsWith('/')) u += '/';
+                return { base: u, local: false, err: null };
+            }
+
+            // default: local model
+            return { base: './my_model/', local: true, err: null };
+        }
+
+        function findModelFiles(files) {
+            const list = Array.from(files);
+            const byName = (re) => list.find(f => re.test(f.name));
+            return {
+                model: byName(/^model\.json$/i),
+                meta: byName(/^metadata\.json$/i),
+                weights: byName(/\.bin$/i) || byName(/weights/i)
+            };
+        }
+
+        function updateModelStatus(ok, detail) {
+            const el = $('tm-model-status');
+            if (!el) return;
+            if (ok) {
+                el.innerHTML = '<span class="text-green-600 font-bold">Model siap</span> — ' + (detail || '');
+            } else {
+                el.innerText = detail || 'Belum ada model — upload folder my_model';
+            }
+        }
+
+        function pickMyModelFolder() {
+            return new Promise((resolve, reject) => {
+                const input = $('tm-folder');
+                if (!input) return reject(new Error('Folder picker tidak ada'));
+                const onChange = () => {
+                    input.removeEventListener('change', onChange);
+                    const files = Array.from(input.files || []);
+                    input.value = '';
+                    if (!files.length) return reject(new Error('Upload dibatalkan'));
+                    resolve(files);
+                };
+                input.addEventListener('change', onChange);
+                input.click();
+            });
+        }
+
+        async function uploadModelFolder() {
+            const files = await pickMyModelFolder();
+            const found = findModelFiles(files);
+            if (!found.model || !found.meta || !found.weights) {
+                updateModelStatus(false, 'Folder salah — harus ada model.json, metadata.json, .bin');
+                showToast('File model tidak lengkap');
+                throw new Error('File model tidak lengkap (model.json, metadata.json, .bin)');
+            }
+            tm.localFiles = found;
+            const names = [found.model.name, found.weights.name, found.meta.name].join(', ');
+            updateModelStatus(true, names);
+            showToast('Model diupload — bisa Start / ganti lagi kapan saja');
+            logActivity('fas fa-upload', 'bg-red-100 text-red-600', 'Model Upload', names);
+
+            // baca labels dulu biar mapping kelihatan
+            try {
+                const metaObj = JSON.parse(await found.meta.text());
+                // file.text() consumes? Actually File.text() can be called once per read - need to re-get from file
+                // File can be read multiple times
+                buildClassMapUI(metaObj.labels || metaObj.classes || []);
+            } catch (e) { console.warn(e); }
+            return found;
+        }
+
+        $('btn-tm-upload') && ($('btn-tm-upload').onclick = async () => {
+            try {
+                await uploadModelFolder();
+            } catch (e) {
+                if (e.message && !/batal/i.test(e.message)) showToast('Gagal: ' + e.message);
+            }
+        });
+
+        async function startTMWithModel() {
+            const flip = true;
+            tm.webcam = new tmImage.Webcam(400, 300, flip);
+            await tm.webcam.setup();
+            await tm.webcam.play();
+            $('tm-placeholder').classList.add('hidden');
+            const canvas = $('tm-canvas');
+            canvas.classList.remove('hidden');
+            canvas.width = tm.webcam.width;
+            canvas.height = tm.webcam.height;
+            tm.running = true;
+            $('btn-tm-start').innerText = 'START KAMERA';
+            $('btn-tm-start').disabled = true;
+            $('btn-tm-stop').disabled = false;
+            showToast('Kamera aktif!');
+            logActivity('fas fa-robot', 'bg-red-100 text-red-600', 'TM Started', 'Running');
+            loopTM();
+        }
+
+        $('btn-tm-start').onclick = async () => {
+            let jsCode = ($('tm-js')?.value || '').trim();
+            if (!jsCode) {
+                jsCode = 'const URL = "./my_model/";';
+                if ($('tm-js')) $('tm-js').value = jsCode;
+            }
+            localStorage.setItem('jokowi_tm_js', jsCode);
+            const resolved = resolveModelBase(jsCode);
+
+            try {
+                $('btn-tm-start').disabled = true;
+                $('btn-tm-start').innerText = 'LOADING...';
+
+                if (resolved.local) {
+                    if (!tm.localFiles || !tm.localFiles.model) {
+                        showToast('Upload model dulu...');
+                        await uploadModelFolder();
+                    }
+                    const { model, meta, weights } = tm.localFiles;
+                    tm.model = await tmImage.loadFromFiles(model, weights, meta);
+                    tm.maxPredictions = tm.model.getTotalClasses();
+                    try {
+                        const metaObj = JSON.parse(await meta.text());
+                        buildClassMapUI(metaObj.labels || metaObj.classes || []);
+                    } catch (e) { console.warn(e); }
+                } else {
+                    const base = resolved.base;
+                    tm.model = await tmImage.load(base + 'model.json', base + 'metadata.json');
+                    tm.maxPredictions = tm.model.getTotalClasses();
+                    try {
+                        const meta = await fetch(base + 'metadata.json').then(r => r.json());
+                        buildClassMapUI(meta.labels || meta.classes || []);
+                    } catch (e) { console.warn(e); }
+                }
+
+                await startTMWithModel();
+            } catch (e) {
+                console.error(e);
+                showToast('Gagal: ' + (e.message || e));
+                logActivity('fas fa-times', 'bg-red-100 text-red-600', 'TM Error', e.message || 'fail');
+                $('btn-tm-start').disabled = false;
+                $('btn-tm-start').innerText = 'START KAMERA';
+            }
+        };
+
+        $('btn-tm-stop').onclick = () => {
+            tm.running = false;
+            try { tm.webcam?.stop(); } catch(e) {}
+            tm.webcam = null;
+            $('tm-placeholder').classList.remove('hidden');
+            $('tm-canvas').classList.add('hidden');
+            $('btn-tm-start').disabled = false;
+            $('btn-tm-stop').disabled = true;
+            $('tm-label').innerText = '—';
+            $('tm-conf').innerText = 'confidence: 0%';
+            showToast("Kamera dimatikan");
+            logActivity("fas fa-stop", "bg-red-100 text-red-600", "TM Stopped", "Kamera off");
+        };
+
+        async function loopTM() {
+            if (!tm.running || !tm.webcam || !tm.model) return;
+            tm.webcam.update();
+            const ctx = $('tm-canvas').getContext('2d');
+            ctx.drawImage(tm.webcam.canvas, 0, 0);
+
+            const prediction = await tm.model.predict(tm.webcam.canvas);
+            // cari class dengan probability tertinggi
+            let best = prediction[0];
+            for (let i = 1; i < prediction.length; i++) {
+                if (prediction[i].probability > best.probability) best = prediction[i];
+            }
+
+            const th = parseInt($('tm-threshold').value) / 100;
+            const conf = best.probability;
+            const className = best.className.trim();
+            const previewCmd = (tm.classMap && tm.classMap[className]) ? tm.classMap[className] : guessCommand(className);
+            $('tm-label').innerText = className + ' → ' + previewCmd;
+            $('tm-conf').innerText = 'confidence: ' + Math.round(conf * 100) + '%';
+
+            if (conf >= th) {
+                // pakai mapping class dari UI (sesuai posisi/class model JS)
+                const className = best.className.trim();
+                let cmd = (tm.classMap && tm.classMap[className]) ? tm.classMap[className] : guessCommand(className);
+
+                // kirim hanya jika perintah berubah atau sudah > 600ms
+                const now = Date.now();
+                if (cmd !== tm.lastLabel || (now - tm.lastSentAt) > 600) {
+                    tm.lastLabel = cmd;
+                    tm.lastSentAt = now;
+                    sendData(cmd);
+                }
+            }
+
+            window.requestAnimationFrame(loopTM);
+        }
+
+        window.onload = () => {
+            loadMapping();
+            loadLogo();
+            bindLogo();
+            const savedJs = localStorage.getItem('jokowi_tm_js');
+            if ($('tm-js')) $('tm-js').value = savedJs || 'const URL = \"./my_model/\";';
+        };
+    </script>
+</body>
+</html>
